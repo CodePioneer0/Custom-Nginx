@@ -1,6 +1,6 @@
-# 🚀 Mini Nginx (C++ HTTP Server)
+#  Mini Nginx (C++ HTTP Server)
 
-## 🎯 Final Goal
+##  Final Goal
 A high-performance HTTP server that:
 - Handles thousands of concurrent connections
 - Uses **epoll** (async I/O)
@@ -8,7 +8,7 @@ A high-performance HTTP server that:
 - Uses a thread pool
 - Implements basic load balancing
 
-## 🧱 1. High-Level Architecture
+##  1. High-Level Architecture
 
 ```text
        Client (Browser / curl)
@@ -26,11 +26,11 @@ A high-performance HTTP server that:
    File System / Upstream Servers
 ```
 
-## ⚙️ 2. Tech Stack
+##  2. Tech Stack
 - **Core:** C++17/20, Linux sockets, `epoll` (VERY IMPORTANT)
 - **Optional but strong:** Boost.Asio (for abstraction), `sendfile()` (for zero-copy fast file transfer)
 
-## 📦 3. Folder Structure
+##  3. Folder Structure
 ```text
 mini-nginx/
 │
@@ -64,23 +64,23 @@ mini-nginx/
     └── index.html
 ```
 
-## 🔥 4. Step-by-Step Build Plan
+##  4. Step-by-Step Build Plan
 
-### 🟢 PHASE 1: Basic TCP Server
+###  PHASE 1: Basic TCP Server
 **Goals:** Create socket, Bind + listen, Accept multiple clients.
 **Key APIs:** `socket()`, `bind()`, `listen()`, `accept()`, `recv()`, `send()`
-👉 **Output:** Server responds: "Hello from server"
+ **Output:** Server responds: "Hello from server"
 
-### 🟡 PHASE 2: HTTP Parsing
+###  PHASE 2: HTTP Parsing
 **Goals:** Understand and parse HTTP structure.
 ```http
 GET /index.html HTTP/1.1
 Host: localhost:8080
 ```
 **Build:** Request parser (Method: GET/POST, Path: /index.html, Headers).
-👉 **Output:** Print parsed request
+ **Output:** Print parsed request
 
-### 🟠 PHASE 3: HTTP Response
+###  PHASE 3: HTTP Response
 **Goals:** Build proper HTTP response formatting.
 ```http
 HTTP/1.1 200 OK
@@ -89,13 +89,13 @@ Content-Length: 13
 
 Hello, World!
 ```
-👉 **Implement:** Status codes, Headers, Body
+ **Implement:** Status codes, Headers, Body
 
-### 🔵 PHASE 4: Static File Server
+###  PHASE 4: Static File Server
 **Flow:** Request `/index.html` → Map to `./www/index.html` → Read file → Send response.
-👉 **Optimize:** Use `sendfile()` (huge plus in interviews for zero-copy transfers).
+ **Optimize:** Use `sendfile()` (huge plus in interviews for zero-copy transfers).
 
-### 🔴 PHASE 5: epoll (ASYNC CORE)
+###  PHASE 5: epoll (ASYNC CORE)
 **Goals:** Replace blocking I/O with `epoll` to handle 10k+ connections efficiently.
 **Key APIs:** `epoll_create1()`, `epoll_ctl()`, `epoll_wait()`
 **Design:** Non-blocking sockets, Event-driven loop.
