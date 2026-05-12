@@ -9,6 +9,7 @@
 #include <sys/stat.h>
 #include <sys/sendfile.h>
 #include <sys/epoll.h>
+#include "../include/thread_pool.h"
 
 using namespace std;
 
@@ -29,6 +30,51 @@ string build_headers(int status_code, const string& status_message, const string
     headers += "Connection: close\r\n";
     headers += "\r\n"; // Crucial blank line
     return headers;
+}
+
+// --- PHASE 6: Handle Client in Worker Thread ---
+void handle_client(int client_socket) {
+    char buffer[2048] = {0};
+    
+    int bytes_read = read(client_socket, buffer, sizeof(buffer) - 1);
+    if (bytes_read <= 0) {
+        cout << "[-] Client disconnected (FD: " << client_socket << ")" << endl;
+        close(client_socket);
+        return;
+    }
+
+    string request(buffer);
+    istringstream request_stream(request);
+
+    string method, path, version;
+    request_stream >> method >> path >> version;
+
+    if (path == "/") path = "/index.html";
+    string local_path = "www" + path;
+    
+    int file_fd = open(local_path.c_str(), O_RDONLY);
+    
+    if (file_fd < 0) {
+        string body = "<html><body><h1>404 Not Found</h1></body></html>";
+        string response = build_headers(404, "Not Found", "text/html", body.length()) + body;
+        send(client_socket, response.c_str(), response.length(), 0);
+    } else {
+        struct stat stat_buf;
+        fstat(file_fd, &stat_buf);
+        
+        string content_type = "text/plain";
+        if (path.find(".html") != string::npos) content_type = "text/html";
+        
+        string headers = build_headers(200, "OK", content_type, stat_buf.st_size);
+        send(client_socket, headers.c_str(), headers.length(), 0);
+        
+        off_t offset = 0;
+        sendfile(client_socket, file_fd, &offset, stat_buf.st_size);
+        close(file_fd);
+    }
+
+    close(client_socket);
+    cout << "[*] Served request and closed connection (FD: " << client_socket << ")" << endl;
 }
 
 int main() {
@@ -86,7 +132,10 @@ int main() {
         return 1;
     }
 
-    cout << "Phase 5 (epoll Async) Server is listening on port " << port << "..." << endl;
+    // --- PHASE 6: Setup Thread Pool ---
+    ThreadPool pool(4); // Create a thread pool with 4 worker threads
+
+    cout << "Phase 5 & 6 (epoll Async + ThreadPool) Server is listening on port " << port << "..." << endl;
 
     // 4. epoll Event Loop
     while (true) {
@@ -114,51 +163,15 @@ int main() {
             else if (events[i].events & EPOLLIN) {
                 // Existing client has sent a request!
                 int client_socket = active_fd;
-                char buffer[2048] = {0};
-                
-                int bytes_read = read(client_socket, buffer, sizeof(buffer) - 1);
-                if (bytes_read <= 0) {
-                    // Client disconnected or error occurred
-                    cout << "[-] Client disconnected (FD: " << client_socket << ")" << endl;
-                    close(client_socket);
-                    epoll_ctl(epoll_fd, EPOLL_CTL_DEL, client_socket, NULL);
-                    continue;
-                }
 
-                string request(buffer);
-                istringstream request_stream(request);
-
-                string method, path, version;
-                request_stream >> method >> path >> version;
-
-                if (path == "/") path = "/index.html";
-                string local_path = "www" + path;
-                
-                int file_fd = open(local_path.c_str(), O_RDONLY);
-                
-                if (file_fd < 0) {
-                    string body = "<html><body><h1>404 Not Found</h1></body></html>";
-                    string response = build_headers(404, "Not Found", "text/html", body.length()) + body;
-                    send(client_socket, response.c_str(), response.length(), 0);
-                } else {
-                    struct stat stat_buf;
-                    fstat(file_fd, &stat_buf);
-                    
-                    string content_type = "text/plain";
-                    if (path.find(".html") != string::npos) content_type = "text/html";
-                    
-                    string headers = build_headers(200, "OK", content_type, stat_buf.st_size);
-                    send(client_socket, headers.c_str(), headers.length(), 0);
-                    
-                    off_t offset = 0;
-                    sendfile(client_socket, file_fd, &offset, stat_buf.st_size);
-                    close(file_fd);
-                }
-
-                // Since we don't have Keep-Alive yet, close connection after response
-                close(client_socket);
+                // Important: Unregister socket from epoll before handing it to thread pool
+                // to avoid multiple threads attempting to read from the same ready socket simultaneously.
                 epoll_ctl(epoll_fd, EPOLL_CTL_DEL, client_socket, NULL);
-                cout << "[*] Served request and closed connection (FD: " << client_socket << ")" << endl;
+
+                // --- PHASE 6: Delegate task to Thread Pool ---
+                pool.enqueue([client_socket]() {
+                    handle_client(client_socket);
+                });
             }
         }
     }
