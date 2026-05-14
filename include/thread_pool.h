@@ -19,7 +19,7 @@ public:
 
     template<class F, class... Args>
     auto enqueue(F&& f, Args&&... args) 
-        -> future<typename invoke_result_t<F, Args...>>;
+        -> future<invoke_result_t<F, Args...>>; //type trait to deduce return type of the function in compile time
 
 private:
     vector<thread> workers;
@@ -32,9 +32,9 @@ private:
 
 template<class F, class... Args>
 auto ThreadPool::enqueue(F&& f, Args&&... args) 
-    -> future<typename invoke_result_t<F, Args...>>
+    -> future<invoke_result_t<F, Args...>>
 {
-    using return_type = typename invoke_result_t<F, Args...>;
+    using return_type = invoke_result_t<F, Args...>;
 
     auto task = make_shared< packaged_task<return_type()> >(
             bind(forward<F>(f), forward<Args>(args)...)
